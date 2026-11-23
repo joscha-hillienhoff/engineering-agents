@@ -6,7 +6,7 @@ readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.12"
-dependencies = ["rdflib>=7.1"]
+dependencies = ["pyshacl>=0.30", "rdflib>=7.1"]
 
 [project.scripts]
 engineering-agents = "engineering_agents.cli:main"

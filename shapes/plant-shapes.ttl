@@ -1,0 +1,115 @@
+# SHACL shapes: the rules the plant data must satisfy.
+#
+# The ontology (ontology/plant.ttl) says what *can* be said about a plant. The
+# shapes in this file say what *must* hold. A SHACL validator checks every
+# resource a shape targets and reports each rule it breaks; it never adds or
+# changes triples.
+#
+# Two styles are used on purpose:
+#   1. Structural shapes built from SHACL Core constraints (sh:minCount,
+#      sh:maxCount, sh:class). They describe the expected shape of the data.
+#   2. A SHACL-SPARQL constraint (sh:sparql) for the engineering rule that
+#      needs to follow several links: device -> location -> zone and
+#      device -> type -> approval -> zone.
+
+@prefix sh:     <http://www.w3.org/ns/shacl#> .
+@prefix plant:  <https://example.org/plant#> .
+@prefix shapes: <https://example.org/plant-shapes#> .
+@prefix owl:    <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+
+# ---------------------------------------------------------------------------
+# Structural shapes (SHACL Core)
+# ---------------------------------------------------------------------------
+
+# A node shape with a target: "check every instance of plant:Device".
+# Each sh:property is a property shape that constrains the values reached via
+# its sh:path. Unlike OWL, a missing value is an error here (closed world).
+shapes:DeviceShape
+    a sh:NodeShape ;
+    sh:targetClass plant:Device ;
+    sh:property [
+        sh:path plant:hasType ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:class plant:DeviceType ;
+        sh:message "A device must have exactly one device type." ;
+    ] ;
+    sh:property [
+        sh:path plant:installedAt ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:class plant:InstallationLocation ;
+        sh:message "A device must be installed at exactly one installation location." ;
+    ] .
+
+# The Ex-zone rule below relies on every installation location having a zone.
+shapes:InstallationLocationShape
+    a sh:NodeShape ;
+    sh:targetClass plant:InstallationLocation ;
+    sh:property [
+        sh:path plant:inZone ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:class plant:ExZone ;
+        sh:message "An installation location must lie in exactly one Ex zone." ;
+    ] .
+
+# ---------------------------------------------------------------------------
+# Engineering rule (SHACL-SPARQL)
+# ---------------------------------------------------------------------------
+
+# "A device's type must be approved for the Ex zone of its installation
+# location. Non-hazardous locations need no approval."
+#
+# The SELECT query looks for violations: every row it returns is reported as
+# one validation result. $this is pre-bound to each targeted device in turn.
+# Variables selected by the query can be used in sh:message as {?name}.
+shapes:ExZoneApprovalShape
+    a sh:NodeShape ;
+    sh:targetClass plant:Device ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "{?tag} at {?locationLabel} ({?zoneLabel}): type {?typeLabel} is not approved for {?zoneLabel}." ;
+        sh:prefixes shapes: ;
+        sh:select """
+            SELECT $this ?tag ?locationLabel ?zoneLabel ?typeLabel
+            WHERE {
+                $this plant:hasType ?type ;
+                      plant:installedAt ?location .
+                ?location plant:inZone ?zone .
+
+                # Non-hazardous locations need no approval.
+                FILTER (?zone != plant:NonHazardous)
+
+                # The violation: no approval of the type covers this zone.
+                FILTER NOT EXISTS { ?type plant:hasApproval/plant:approvedFor ?zone }
+
+                # Labels for the message. OPTIONAL plus COALESCE keeps the
+                # violation even when a label is missing.
+                OPTIONAL { $this rdfs:label ?thisLabel }
+                OPTIONAL { ?location rdfs:label ?locLabel }
+                OPTIONAL { ?zone rdfs:label ?zLabel }
+                OPTIONAL { ?type rdfs:label ?tLabel }
+                BIND (COALESCE(?thisLabel, STR($this)) AS ?tag)
+                BIND (COALESCE(?locLabel, STR(?location)) AS ?locationLabel)
+                BIND (COALESCE(?zLabel, STR(?zone)) AS ?zoneLabel)
+                BIND (COALESCE(?tLabel, STR(?type)) AS ?typeLabel)
+            }
+            """ ;
+    ] .
+
+# SHACL-SPARQL queries cannot use @prefix lines from this file. Prefixes are
+# declared with sh:declare and referenced via sh:prefixes above.
+shapes:
+    a owl:Ontology ;
+    rdfs:label "Plant shapes" ;
+    sh:declare [
+        sh:prefix "plant" ;
+        sh:namespace "https://example.org/plant#"^^xsd:anyURI ;
+    ] ;
+    sh:declare [
+        sh:prefix "rdfs" ;
+        sh:namespace "http://www.w3.org/2000/01/rdf-schema#"^^xsd:anyURI ;
+    ] .
