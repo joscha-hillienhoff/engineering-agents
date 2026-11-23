@@ -3,11 +3,20 @@
 engineering-agents query <name> [argument]
 engineering-agents validate
 engineering-agents check-replacement --type <new type> [--from <old type>]
+engineering-agents analyse [--task <text>]
+engineering-agents plan [--task <text>] [--type <new type>]
 """
 
 import argparse
+import json
+import textwrap
 
+from pydantic import BaseModel
+
+from engineering_agents.agent import AgentResult, ToolCall, make_model
+from engineering_agents.analysis import TASK, run_analysis
 from engineering_agents.graph import load_graph
+from engineering_agents.planning import run_planning
 from engineering_agents.queries import QUERIES, run_query
 from engineering_agents.validation import ValidationResult, check_replacements, validate_plant
 
@@ -56,7 +65,53 @@ def main(argv: list[str] | None = None) -> None:
         help="device type to replace (default: %(default)s)",
     )
 
+    analyse_parser = commands.add_parser(
+        "analyse",
+        help="run the analysis agent once (calls the OpenAI API)",
+        description="Run the analysis agent on a task and print its tool calls and its "
+        "structured result. Needs OPENAI_API_KEY in the environment or in .env.",
+    )
+    analyse_parser.add_argument("--task", default=TASK, help="the task (default: %(default)s)")
+
+    plan_parser = commands.add_parser(
+        "plan",
+        help="run the analysis agent, then the planning agent (calls the OpenAI API)",
+        description="Run the analysis agent, hand its result to the planning agent, print "
+        "both agents' tool calls and results, and validate the proposed plan. "
+        "Needs OPENAI_API_KEY in the environment or in .env.",
+    )
+    plan_parser.add_argument("--task", default=TASK, help="the task (default: %(default)s)")
+    plan_parser.add_argument(
+        "--type",
+        default="LevelTransmitterB",
+        help="requested replacement type (default: %(default)s)",
+    )
+
     args = parser.parse_args(argv)
+
+    if args.command in ("analyse", "plan"):
+        try:
+            model = make_model()
+        except RuntimeError as error:
+            parser.error(str(error))
+        print(f"Model: {model.model_name}\n")
+
+        print("== Analysis agent")
+        analysis = run_analysis(model, args.task, on_tool_call=print_tool_call)
+        print_output(analysis)
+        if args.command == "plan":
+            print("\n== Planning agent")
+            plan = run_planning(model, analysis.output, args.type, on_tool_call=print_tool_call)
+            print_output(plan)
+            print("\n== Validation of the proposed plan")
+            try:
+                result = check_replacements(load_graph(), plan.output.replacements())
+            except ValueError as error:  # e.g. the model proposed a type that does not exist
+                print(f"Cannot validate the plan: {error}")
+            else:
+                print(format_result(result))
+        return
+
     graph = load_graph()
 
     if args.command == "query":
@@ -88,6 +143,18 @@ def main(argv: list[str] | None = None) -> None:
         print(format_result(result))
         if not result.conforms:
             raise SystemExit(1)
+
+
+def print_tool_call(call: ToolCall) -> None:
+    """Show one tool call while the agent is running: what it asked for, what it got."""
+    print(f"tool call: {call.name}({json.dumps(call.args, ensure_ascii=False)})")
+    print(f"  result:  {textwrap.shorten(call.result, width=150, placeholder=' ...')}")
+
+
+def print_output(result: AgentResult[BaseModel]) -> None:
+    """Show the structured result an agent returned."""
+    print(f"\nstructured output ({type(result.output).__name__}):")
+    print(result.output.model_dump_json(indent=2))
 
 
 def format_result(result: ValidationResult) -> str:

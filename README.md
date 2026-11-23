@@ -24,10 +24,13 @@ Built so far:
 - SHACL shapes, including the rule that a device's type must be approved for
   the Ex zone of its installation location, and a validator that checks the
   plant or a proposed replacement plan against them
+- an analysis agent and a planning agent (OpenAI models via LangChain) that
+  use the queries and the validator as tools and return structured results;
+  the planning agent can revise a plan from a list of rule violations
 
-Planned: an analysis agent and a planning agent with tool calling, a
-supervisor that orchestrates them (sending rejected proposals back to the
-planner), and a human approval step before the result is handed over.
+Planned: a supervisor that orchestrates the agents (sending rejected
+proposals back to the planner), and a human approval step before the result
+is handed over.
 
 ## Layout
 
@@ -40,8 +43,12 @@ src/engineering_agents/
     queries.py                 named queries: load, bind parameter, run
     sparql/*.rq                the SPARQL queries, one per file
     validation.py              SHACL validation of the plant or a proposed change
+    tools.py                   queries and validation as tools for the agents
+    agent.py                   the tool-calling loop and the OpenAI model setup
+    analysis.py                analysis agent: finds the affected devices
+    planning.py                planning agent: proposes and revises replacements
     cli.py                     command-line interface
-tests/                         graph consistency, query results, validation results
+tests/                         graph, queries, validation, agents (offline, no API calls)
 docs/concepts/                 explanations of the underlying concepts
 ```
 
@@ -62,7 +69,17 @@ uv run engineering-agents check-replacement --type LevelTransmitterB   # violati
 uv run engineering-agents check-replacement --type LevelTransmitterC   # conforms
 ```
 
-Checks:
+The agents call the OpenAI API. Copy `.env.example` to `.env` and set
+`OPENAI_API_KEY` (or set it in the environment); `OPENAI_MODEL` overrides the
+default small model. Each command prints every tool call and the structured
+result:
+
+```console
+uv run engineering-agents analyse   # analysis agent
+uv run engineering-agents plan      # analysis, planning, then a SHACL check of the plan
+```
+
+Checks (the tests use a scripted stand-in for the model and never call the API):
 
 ```console
 uv run pytest
@@ -74,7 +91,8 @@ uv run ruff format --check
 
 Start with [docs/concepts](docs/concepts/README.md). Chapter 01 explains RDF,
 Turtle, ontologies and SPARQL using this project's files; chapter 02 explains
-validation with SHACL.
+validation with SHACL; chapter 03 explains agents, tool calling and
+structured output.
 
 ## License
 
