@@ -5,6 +5,8 @@ engineering-agents validate
 engineering-agents check-replacement --type <new type> [--from <old type>]
 engineering-agents analyse [--task <text>]
 engineering-agents plan [--task <text>] [--type <new type>]
+engineering-agents run [--task <text>] [--type <new type>] [--max-rounds <n>]
+engineering-agents graph
 """
 
 import argparse
@@ -15,10 +17,13 @@ from pydantic import BaseModel
 
 from engineering_agents.agent import AgentResult, ToolCall, make_model
 from engineering_agents.analysis import TASK, run_analysis
-from engineering_agents.graph import load_graph
+from engineering_agents.graph import ROOT, load_graph
+from engineering_agents.orchestration import Context, build_graph, initial_state
 from engineering_agents.planning import run_planning
 from engineering_agents.queries import QUERIES, run_query
 from engineering_agents.validation import ValidationResult, check_replacements, validate_plant
+
+GRAPH_DIAGRAM = ROOT / "docs" / "img" / "graph.mmd"
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -87,7 +92,52 @@ def main(argv: list[str] | None = None) -> None:
         help="requested replacement type (default: %(default)s)",
     )
 
+    run_parser = commands.add_parser(
+        "run",
+        help="run the whole multi-agent graph with the supervisor (calls the OpenAI API)",
+        description="Run the LangGraph graph: the supervisor sends the task to the analysis "
+        "agent, the planning agent and the SHACL validator, sends rejected plans back to the "
+        "planner, and hands over a conforming plan. Prints every step as it happens. "
+        "Needs OPENAI_API_KEY in the environment or in .env.",
+    )
+    run_parser.add_argument("--task", default=TASK, help="the task (default: %(default)s)")
+    run_parser.add_argument(
+        "--type",
+        default="LevelTransmitterB",
+        help="requested replacement type (default: %(default)s)",
+    )
+    run_parser.add_argument(
+        "--max-rounds",
+        type=int,
+        default=Context.max_planning_rounds,
+        help="planning rounds before the supervisor stops (default: %(default)s)",
+    )
+
+    commands.add_parser(
+        "graph",
+        help="print the graph as a Mermaid diagram",
+        description="Print the compiled LangGraph graph as a Mermaid diagram and write it "
+        "to docs/img/graph.mmd.",
+    )
+
     args = parser.parse_args(argv)
+
+    if args.command == "graph":
+        diagram = build_graph().get_graph().draw_mermaid()
+        GRAPH_DIAGRAM.parent.mkdir(parents=True, exist_ok=True)
+        GRAPH_DIAGRAM.write_text(diagram)
+        print(diagram)
+        return
+
+    if args.command == "run":
+        try:
+            model = make_model()
+        except RuntimeError as error:
+            parser.error(str(error))
+        print(f"Model: {model.model_name}\n")
+        context = Context(model=model, max_planning_rounds=args.max_rounds)
+        run_graph(initial_state(args.task, args.type), context)
+        return
 
     if args.command in ("analyse", "plan"):
         try:
@@ -143,6 +193,46 @@ def main(argv: list[str] | None = None) -> None:
         print(format_result(result))
         if not result.conforms:
             raise SystemExit(1)
+
+
+def run_graph(state: dict, context: Context) -> dict:
+    """Run the graph and print each step as it happens; return the final state.
+
+    ``stream`` yields events while the graph runs. Three kinds are requested:
+    "custom" (what a node sends while it runs; here the agents' tool calls),
+    "updates" (the part of the state a node returned, after each node) and
+    "values" (the whole state after each step; the last one is the result).
+    """
+    final = state
+    for mode, event in build_graph().stream(
+        state, context=context, stream_mode=["custom", "updates", "values"]
+    ):
+        if mode == "custom":
+            print_tool_call(event)
+        elif mode == "values":
+            final = event
+        else:
+            print_update(event)
+    print(f"\nStatus: {final['status']}")
+    if final["status"] == "handed_over":
+        print(f"Plan: {final['plan'].summary}")
+    return final
+
+
+def print_update(event: dict[str, dict]) -> None:
+    """Show what a node did: its trace notes, and the new plan or violations."""
+    for node, update in event.items():
+        for entry in update["trace"]:
+            print(f"[{entry['node']}] {entry['note']}")
+        if node == "planning":
+            rows = [
+                {"device": e.device, "proposed type": e.proposed_type, "reason": e.reason}
+                for e in update["plan"].entries
+            ]
+            print(textwrap.indent(format_table(rows), "    "))
+        if node == "validator":
+            for violation in update["violations"]:
+                print(f"    - {violation.message}")
 
 
 def print_tool_call(call: ToolCall) -> None:

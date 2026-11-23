@@ -27,10 +27,12 @@ Built so far:
 - an analysis agent and a planning agent (OpenAI models via LangChain) that
   use the queries and the validator as tools and return structured results;
   the planning agent can revise a plan from a list of rule violations
+- a LangGraph graph in which a rule-based supervisor runs the analysis agent,
+  the planning agent and the SHACL validator, sends rejected plans back to the
+  planner with the violations, stops with "needs human" after too many
+  rejections, and hands over a conforming plan
 
-Planned: a supervisor that orchestrates the agents (sending rejected
-proposals back to the planner), and a human approval step before the result
-is handed over.
+Planned: a human approval step before the result is handed over.
 
 ## Layout
 
@@ -47,9 +49,11 @@ src/engineering_agents/
     agent.py                   the tool-calling loop and the OpenAI model setup
     analysis.py                analysis agent: finds the affected devices
     planning.py                planning agent: proposes and revises replacements
+    orchestration.py           LangGraph graph: shared state, supervisor, agents, validator
     cli.py                     command-line interface
-tests/                         graph, queries, validation, agents (offline, no API calls)
+tests/                         graph, queries, validation, agents, orchestration (offline)
 docs/concepts/                 explanations of the underlying concepts
+docs/img/graph.mmd             the orchestration graph as a Mermaid diagram
 ```
 
 ## Running
@@ -77,7 +81,13 @@ result:
 ```console
 uv run engineering-agents analyse   # analysis agent
 uv run engineering-agents plan      # analysis, planning, then a SHACL check of the plan
+uv run engineering-agents run       # the whole graph: supervisor, agents, validator, feedback loop
 ```
+
+`run` prints each step as it happens: which node ran, why the supervisor
+chose it, the agents' tool calls, each plan and each violation.
+`uv run engineering-agents graph` prints the graph as a Mermaid diagram (no
+API key needed).
 
 Checks (the tests use a scripted stand-in for the model and never call the API):
 
@@ -92,7 +102,8 @@ uv run ruff format --check
 Start with [docs/concepts](docs/concepts/README.md). Chapter 01 explains RDF,
 Turtle, ontologies and SPARQL using this project's files; chapter 02 explains
 validation with SHACL; chapter 03 explains agents, tool calling and
-structured output.
+structured output; chapter 04 explains orchestration with a supervisor in
+LangGraph.
 
 ## License
 
