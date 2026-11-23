@@ -1,0 +1,18 @@
+# The Ex zones a device type is approved for.
+#
+# Parameter: ?deviceType, for example ex:LevelTransmitterB.
+# One result row per approved zone, because the approval has one
+# plant:approvedFor triple per zone.
+
+PREFIX plant: <https://example.org/plant#>
+PREFIX rdfs:  <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT ?zone ?certificate ?status
+WHERE {
+  ?deviceType plant:status ?status ;
+              plant:hasApproval ?approval .
+  ?approval plant:certificateNumber ?certificate ;
+            plant:approvedFor ?zoneIri .
+  ?zoneIri rdfs:label ?zone .
+}
+ORDER BY ?zone

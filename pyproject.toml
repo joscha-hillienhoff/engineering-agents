@@ -1,0 +1,28 @@
+[project]
+name = "engineering-agents"
+version = "0.1.0"
+description = "A minimal multi-agent demo over a plant-engineering knowledge graph"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.12"
+dependencies = ["rdflib>=7.1"]
+
+[project.scripts]
+engineering-agents = "engineering_agents.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.8"]
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

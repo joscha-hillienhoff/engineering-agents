@@ -1,0 +1,34 @@
+# Device types that could replace the type of one device at its location.
+#
+# Parameter: ?device, for example ex:LT-101.
+# A candidate must
+#   1. measure the same variable as the current type (same function),
+#   2. still be available (status "active"),
+#   3. be approved for the Ex zone of the device's installation location,
+#   4. differ from the current type.
+
+PREFIX plant: <https://example.org/plant#>
+PREFIX rdfs:  <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT ?candidate ?label ?manufacturer ?zone
+WHERE {
+  # What is installed, and in which zone? "/" is a property path: it follows
+  # plant:installedAt and then plant:inZone without naming the location.
+  ?device plant:hasType ?currentType ;
+          plant:installedAt/plant:inZone ?zoneIri .
+  ?currentType plant:measuredVariable ?variable .
+  ?zoneIri rdfs:label ?zone .
+
+  # Which types fulfil conditions 1-3? Reusing ?variable and ?zoneIri here
+  # is what joins the candidate to the device above.
+  ?candidate a plant:DeviceType ;
+             plant:measuredVariable ?variable ;
+             plant:status "active" ;
+             plant:hasApproval/plant:approvedFor ?zoneIri ;
+             rdfs:label ?label ;
+             plant:manufacturer ?manufacturer .
+
+  # Condition 4: FILTER removes rows for which the expression is false.
+  FILTER (?candidate != ?currentType)
+}
+ORDER BY ?candidate

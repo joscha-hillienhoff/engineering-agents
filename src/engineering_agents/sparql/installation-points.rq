@@ -1,0 +1,24 @@
+# All installation points of one device type.
+#
+# Parameter: ?deviceType is bound from outside before the query runs
+# (see queries.py), for example to ex:LevelTransmitterA.
+
+PREFIX plant: <https://example.org/plant#>
+PREFIX rdfs:  <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT ?device ?location ?unit ?zone ?medium
+WHERE {
+  # Because ?deviceType is already bound, this pattern only matches devices of
+  # that type. Without the binding it would match devices of every type.
+  ?device plant:hasType ?deviceType ;
+          plant:installedAt ?loc .
+
+  ?loc rdfs:label ?location ;
+       plant:partOf ?unitIri ;
+       plant:inZone ?zoneIri .
+  ?unitIri rdfs:label ?unit .
+  ?zoneIri rdfs:label ?zone .
+
+  OPTIONAL { ?device plant:measuredMedium ?medium }
+}
+ORDER BY ?device

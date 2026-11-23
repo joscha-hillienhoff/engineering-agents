@@ -1,0 +1,215 @@
+# Knowledge graph of an invented demo plant (ABox).
+#
+# This file states concrete facts using the vocabulary from ontology/plant.ttl.
+# Every name, tag, manufacturer and certificate number here is invented.
+#
+# Structure:
+#   Demo plant
+#   +-- U100 Tank farm   (T-101 zone 1, T-102 non-hazardous, T-103 zone 2, L-104 zone 2)
+#   +-- U200 Reaction    (R-201 zone 1, V-202 zone 2)
+#   +-- U300 Utilities   (B-301 non-hazardous, K-302 non-hazardous)
+#
+# Tag convention: first letter = measured variable (L level, P pressure,
+# T temperature, F flow), "T" = transmitter, number = unit + position.
+
+@prefix plant: <https://example.org/plant#> .
+@prefix ex:    <https://example.org/demo-plant#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+
+# ---------------------------------------------------------------------------
+# Device types and their approvals
+# ---------------------------------------------------------------------------
+
+# Type A is discontinued: all its installation points need a replacement.
+ex:LevelTransmitterA
+    a plant:DeviceType ;
+    rdfs:label "Level transmitter type A" ;
+    plant:manufacturer "Example Instruments" ;
+    plant:measuredVariable "level" ;
+    plant:status "discontinued" ;
+    plant:hasApproval ex:Approval-A .
+
+ex:Approval-A
+    a plant:Approval ;
+    plant:certificateNumber "DEMO-EX-1001" ;
+    plant:approvedFor plant:Zone1, plant:Zone2, plant:NonHazardous .
+
+# Type B is the intended successor, but it is NOT approved for zone 1.
+ex:LevelTransmitterB
+    a plant:DeviceType ;
+    rdfs:label "Level transmitter type B" ;
+    plant:manufacturer "Example Instruments" ;
+    plant:measuredVariable "level" ;
+    plant:status "active" ;
+    plant:hasApproval ex:Approval-B .
+
+ex:Approval-B
+    a plant:Approval ;
+    plant:certificateNumber "DEMO-EX-1002" ;
+    plant:approvedFor plant:Zone2, plant:NonHazardous .
+
+# Type C is an alternative from another manufacturer that IS approved for zone 1.
+ex:LevelTransmitterC
+    a plant:DeviceType ;
+    rdfs:label "Level transmitter type C" ;
+    plant:manufacturer "Sample Sensor Works" ;
+    plant:measuredVariable "level" ;
+    plant:status "active" ;
+    plant:hasApproval ex:Approval-C .
+
+ex:Approval-C
+    a plant:Approval ;
+    plant:certificateNumber "DEMO-EX-1003" ;
+    plant:approvedFor plant:Zone1, plant:Zone2, plant:NonHazardous .
+
+ex:PressureTransmitterP
+    a plant:DeviceType ;
+    rdfs:label "Pressure transmitter type P" ;
+    plant:manufacturer "Example Instruments" ;
+    plant:measuredVariable "pressure" ;
+    plant:status "active" ;
+    plant:hasApproval ex:Approval-P .
+
+ex:Approval-P
+    a plant:Approval ;
+    plant:certificateNumber "DEMO-EX-2001" ;
+    plant:approvedFor plant:Zone1, plant:Zone2, plant:NonHazardous .
+
+ex:TemperatureTransmitterT
+    a plant:DeviceType ;
+    rdfs:label "Temperature transmitter type T" ;
+    plant:manufacturer "Sample Sensor Works" ;
+    plant:measuredVariable "temperature" ;
+    plant:status "active" ;
+    plant:hasApproval ex:Approval-T .
+
+ex:Approval-T
+    a plant:Approval ;
+    plant:certificateNumber "DEMO-EX-3001" ;
+    plant:approvedFor plant:Zone0, plant:Zone1, plant:Zone2, plant:NonHazardous .
+
+ex:FlowMeterF
+    a plant:DeviceType ;
+    rdfs:label "Flow meter type F" ;
+    plant:manufacturer "Sample Sensor Works" ;
+    plant:measuredVariable "flow" ;
+    plant:status "active" ;
+    plant:hasApproval ex:Approval-F .
+
+ex:Approval-F
+    a plant:Approval ;
+    plant:certificateNumber "DEMO-EX-4001" ;
+    plant:approvedFor plant:Zone2, plant:NonHazardous .
+
+# ---------------------------------------------------------------------------
+# Location hierarchy: plant > units > installation locations
+# ---------------------------------------------------------------------------
+
+ex:DemoPlant
+    a plant:Plant ;
+    rdfs:label "Demo plant" .
+
+ex:U100 a plant:Unit ; rdfs:label "U100 Tank farm" ; plant:partOf ex:DemoPlant .
+ex:U200 a plant:Unit ; rdfs:label "U200 Reaction" ; plant:partOf ex:DemoPlant .
+ex:U300 a plant:Unit ; rdfs:label "U300 Utilities" ; plant:partOf ex:DemoPlant .
+
+ex:T-101
+    a plant:InstallationLocation ;
+    rdfs:label "T-101 Solvent storage tank" ;
+    plant:partOf ex:U100 ;
+    plant:inZone plant:Zone1 .
+
+ex:T-102
+    a plant:InstallationLocation ;
+    rdfs:label "T-102 Process water tank" ;
+    plant:partOf ex:U100 ;
+    plant:inZone plant:NonHazardous .
+
+ex:T-103
+    a plant:InstallationLocation ;
+    rdfs:label "T-103 Product tank" ;
+    plant:partOf ex:U100 ;
+    plant:inZone plant:Zone2 .
+
+ex:L-104
+    a plant:InstallationLocation ;
+    rdfs:label "L-104 Product transfer line" ;
+    plant:partOf ex:U100 ;
+    plant:inZone plant:Zone2 .
+
+ex:R-201
+    a plant:InstallationLocation ;
+    rdfs:label "R-201 Reactor" ;
+    plant:partOf ex:U200 ;
+    plant:inZone plant:Zone1 .
+
+ex:V-202
+    a plant:InstallationLocation ;
+    rdfs:label "V-202 Buffer vessel" ;
+    plant:partOf ex:U200 ;
+    plant:inZone plant:Zone2 .
+
+ex:B-301
+    a plant:InstallationLocation ;
+    rdfs:label "B-301 Cooling water basin" ;
+    plant:partOf ex:U300 ;
+    plant:inZone plant:NonHazardous .
+
+ex:K-302
+    a plant:InstallationLocation ;
+    rdfs:label "K-302 Compressed air receiver" ;
+    plant:partOf ex:U300 ;
+    plant:inZone plant:NonHazardous .
+
+# ---------------------------------------------------------------------------
+# Devices (18). The rdfs:label of a device is its tag.
+# Four devices use the discontinued type A: LT-101 (zone 1!), LT-102, LT-103, LT-301.
+# PT-302 and TT-202 have no recorded medium, as often happens in real plant data.
+# ---------------------------------------------------------------------------
+
+# U100 Tank farm
+ex:LT-101 a plant:Device ; rdfs:label "LT-101" ; plant:hasType ex:LevelTransmitterA ;
+    plant:installedAt ex:T-101 ; plant:measuredMedium "solvent" .
+ex:PT-101 a plant:Device ; rdfs:label "PT-101" ; plant:hasType ex:PressureTransmitterP ;
+    plant:installedAt ex:T-101 ; plant:measuredMedium "solvent" .
+ex:TT-101 a plant:Device ; rdfs:label "TT-101" ; plant:hasType ex:TemperatureTransmitterT ;
+    plant:installedAt ex:T-101 ; plant:measuredMedium "solvent" .
+
+ex:LT-102 a plant:Device ; rdfs:label "LT-102" ; plant:hasType ex:LevelTransmitterA ;
+    plant:installedAt ex:T-102 ; plant:measuredMedium "process water" .
+ex:TT-102 a plant:Device ; rdfs:label "TT-102" ; plant:hasType ex:TemperatureTransmitterT ;
+    plant:installedAt ex:T-102 ; plant:measuredMedium "process water" .
+
+ex:LT-103 a plant:Device ; rdfs:label "LT-103" ; plant:hasType ex:LevelTransmitterA ;
+    plant:installedAt ex:T-103 ; plant:measuredMedium "intermediate product" .
+ex:PT-103 a plant:Device ; rdfs:label "PT-103" ; plant:hasType ex:PressureTransmitterP ;
+    plant:installedAt ex:T-103 ; plant:measuredMedium "intermediate product" .
+
+ex:FT-104 a plant:Device ; rdfs:label "FT-104" ; plant:hasType ex:FlowMeterF ;
+    plant:installedAt ex:L-104 ; plant:measuredMedium "intermediate product" .
+
+# U200 Reaction
+ex:LT-201 a plant:Device ; rdfs:label "LT-201" ; plant:hasType ex:LevelTransmitterC ;
+    plant:installedAt ex:R-201 ; plant:measuredMedium "reaction mixture" .
+ex:PT-201 a plant:Device ; rdfs:label "PT-201" ; plant:hasType ex:PressureTransmitterP ;
+    plant:installedAt ex:R-201 ; plant:measuredMedium "reaction mixture" .
+ex:TT-201 a plant:Device ; rdfs:label "TT-201" ; plant:hasType ex:TemperatureTransmitterT ;
+    plant:installedAt ex:R-201 ; plant:measuredMedium "reaction mixture" .
+
+ex:LT-202 a plant:Device ; rdfs:label "LT-202" ; plant:hasType ex:LevelTransmitterB ;
+    plant:installedAt ex:V-202 ; plant:measuredMedium "intermediate product" .
+ex:PT-202 a plant:Device ; rdfs:label "PT-202" ; plant:hasType ex:PressureTransmitterP ;
+    plant:installedAt ex:V-202 ; plant:measuredMedium "intermediate product" .
+ex:TT-202 a plant:Device ; rdfs:label "TT-202" ; plant:hasType ex:TemperatureTransmitterT ;
+    plant:installedAt ex:V-202 .
+
+# U300 Utilities
+ex:LT-301 a plant:Device ; rdfs:label "LT-301" ; plant:hasType ex:LevelTransmitterA ;
+    plant:installedAt ex:B-301 ; plant:measuredMedium "cooling water" .
+ex:TT-301 a plant:Device ; rdfs:label "TT-301" ; plant:hasType ex:TemperatureTransmitterT ;
+    plant:installedAt ex:B-301 ; plant:measuredMedium "cooling water" .
+ex:FT-301 a plant:Device ; rdfs:label "FT-301" ; plant:hasType ex:FlowMeterF ;
+    plant:installedAt ex:B-301 ; plant:measuredMedium "cooling water" .
+
+ex:PT-302 a plant:Device ; rdfs:label "PT-302" ; plant:hasType ex:PressureTransmitterP ;
+    plant:installedAt ex:K-302 .

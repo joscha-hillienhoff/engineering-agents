@@ -1,0 +1,28 @@
+# All devices with their type, installation location, unit and Ex zone.
+#
+# A SPARQL query is a graph pattern with variables (?name). The engine finds
+# every way to bind the variables so that all triple patterns exist in the
+# graph; each such binding becomes one result row.
+
+PREFIX plant: <https://example.org/plant#>
+PREFIX rdfs:  <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT ?device ?type ?location ?unit ?zone ?medium
+WHERE {
+  # ";" repeats the subject: these three patterns all talk about ?device.
+  ?device a plant:Device ;
+          plant:hasType ?type ;
+          plant:installedAt ?loc .
+
+  # Follow the links from the device to its location, unit and zone,
+  # and pick up human-readable labels on the way.
+  ?loc rdfs:label ?location ;
+       plant:partOf ?unitIri ;
+       plant:inZone ?zoneIri .
+  ?unitIri rdfs:label ?unit .
+  ?zoneIri rdfs:label ?zone .
+
+  # OPTIONAL keeps the row even if no medium is recorded (?medium stays unbound).
+  OPTIONAL { ?device plant:measuredMedium ?medium }
+}
+ORDER BY ?device

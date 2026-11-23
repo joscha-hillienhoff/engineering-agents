@@ -1,0 +1,180 @@
+# Plant ontology (TBox): the vocabulary used to describe a process plant.
+#
+# This file defines *what kinds of things exist* (classes) and *how they can be
+# related* (properties). It contains no facts about a concrete plant; those live
+# in data/plant.ttl (the ABox). The vocabulary is deliberately small and is only
+# inspired by common plant-engineering terms; it does not reproduce any standard.
+
+@prefix plant: <https://example.org/plant#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+
+<https://example.org/plant>
+    a owl:Ontology ;
+    rdfs:label "Plant ontology" ;
+    rdfs:comment "A minimal vocabulary for field devices, their types, installation locations, explosion-protection zones and type approvals." ;
+    owl:versionInfo "0.1.0" .
+
+# ---------------------------------------------------------------------------
+# Classes
+# ---------------------------------------------------------------------------
+
+plant:Device
+    a owl:Class ;
+    rdfs:label "Device" ;
+    rdfs:comment "A concrete field instrument installed in the plant, identified by its tag (for example LT-101). Each device is an instance of exactly one device type." .
+
+plant:DeviceType
+    a owl:Class ;
+    rdfs:label "Device type" ;
+    rdfs:comment "A product model that devices are instances of, for example a specific level transmitter model. Manufacturer, lifecycle status and approvals belong to the type, not to the individual device." .
+
+plant:Location
+    a owl:Class ;
+    rdfs:label "Location" ;
+    rdfs:comment "Any place in the plant structure. Locations form a hierarchy via plant:partOf: plant > unit > installation location." .
+
+plant:Plant
+    a owl:Class ;
+    rdfs:subClassOf plant:Location ;
+    rdfs:label "Plant" ;
+    rdfs:comment "The top of the location hierarchy: a whole production site." .
+
+plant:Unit
+    a owl:Class ;
+    rdfs:subClassOf plant:Location ;
+    rdfs:label "Unit" ;
+    rdfs:comment "A functional section of a plant, for example a tank farm or a reaction unit. A unit is part of a plant." .
+
+plant:InstallationLocation
+    a owl:Class ;
+    rdfs:subClassOf plant:Location ;
+    rdfs:label "Installation location" ;
+    rdfs:comment "A piece of equipment or a pipe section where devices are mounted, for example a tank. It is part of a unit and lies in exactly one Ex zone." .
+
+plant:ExZone
+    a owl:Class ;
+    rdfs:label "Ex zone" ;
+    rdfs:comment "An explosion-protection zone classifying how likely an explosive gas atmosphere is. The four possible values are listed below as named individuals." .
+
+plant:Approval
+    a owl:Class ;
+    rdfs:label "Approval" ;
+    rdfs:comment "A type approval (certificate) of a device type that states in which Ex zones devices of this type may be installed." .
+
+# ---------------------------------------------------------------------------
+# Ex zones: a closed set of named individuals defined together with the
+# vocabulary, because every plant uses the same four values.
+# Note: approvals in data/plant.ttl list every allowed zone explicitly. A type
+# approved for zone 1 is therefore also listed for zone 2 and non-hazardous;
+# nothing is inferred automatically.
+# ---------------------------------------------------------------------------
+
+plant:Zone0
+    a owl:NamedIndividual, plant:ExZone ;
+    rdfs:label "Zone 0" ;
+    rdfs:comment "Explosive gas atmosphere present continuously or for long periods." .
+
+plant:Zone1
+    a owl:NamedIndividual, plant:ExZone ;
+    rdfs:label "Zone 1" ;
+    rdfs:comment "Explosive gas atmosphere likely to occur occasionally in normal operation." .
+
+plant:Zone2
+    a owl:NamedIndividual, plant:ExZone ;
+    rdfs:label "Zone 2" ;
+    rdfs:comment "Explosive gas atmosphere not likely in normal operation and, if it occurs, only for a short time." .
+
+plant:NonHazardous
+    a owl:NamedIndividual, plant:ExZone ;
+    rdfs:label "Non-hazardous" ;
+    rdfs:comment "No explosion-protection requirements." .
+
+# ---------------------------------------------------------------------------
+# Object properties: relations between two resources.
+# rdfs:domain says what kind of thing the subject is, rdfs:range what kind of
+# thing the object is.
+# ---------------------------------------------------------------------------
+
+plant:hasType
+    a owl:ObjectProperty ;
+    rdfs:label "has type" ;
+    rdfs:comment "Links a device to the device type (product model) it is an instance of." ;
+    rdfs:domain plant:Device ;
+    rdfs:range plant:DeviceType .
+
+plant:installedAt
+    a owl:ObjectProperty ;
+    rdfs:label "installed at" ;
+    rdfs:comment "Links a device to the installation location where it is mounted." ;
+    rdfs:domain plant:Device ;
+    rdfs:range plant:InstallationLocation .
+
+plant:partOf
+    a owl:ObjectProperty, owl:TransitiveProperty ;
+    rdfs:label "part of" ;
+    rdfs:comment "Builds the location hierarchy: an installation location is part of a unit, a unit is part of a plant. Declared transitive, but rdflib does not reason, so queries use the SPARQL path plant:partOf+ to follow several levels." ;
+    rdfs:domain plant:Location ;
+    rdfs:range plant:Location .
+
+plant:inZone
+    a owl:ObjectProperty ;
+    rdfs:label "in zone" ;
+    rdfs:comment "Links an installation location to the Ex zone it lies in." ;
+    rdfs:domain plant:InstallationLocation ;
+    rdfs:range plant:ExZone .
+
+plant:hasApproval
+    a owl:ObjectProperty ;
+    rdfs:label "has approval" ;
+    rdfs:comment "Links a device type to its type approval." ;
+    rdfs:domain plant:DeviceType ;
+    rdfs:range plant:Approval .
+
+plant:approvedFor
+    a owl:ObjectProperty ;
+    rdfs:label "approved for" ;
+    rdfs:comment "Links an approval to an Ex zone in which devices of the approved type may be installed. An approval has one triple per allowed zone." ;
+    rdfs:domain plant:Approval ;
+    rdfs:range plant:ExZone .
+
+# ---------------------------------------------------------------------------
+# Datatype properties: attributes whose value is a literal (here a string).
+# ---------------------------------------------------------------------------
+
+plant:manufacturer
+    a owl:DatatypeProperty ;
+    rdfs:label "manufacturer" ;
+    rdfs:comment "Name of the company that makes a device type." ;
+    rdfs:domain plant:DeviceType ;
+    rdfs:range xsd:string .
+
+plant:status
+    a owl:DatatypeProperty ;
+    rdfs:label "status" ;
+    rdfs:comment "Lifecycle status of a device type: \"active\" (still available) or \"discontinued\" (no longer available, installed devices need a replacement)." ;
+    rdfs:domain plant:DeviceType ;
+    rdfs:range xsd:string .
+
+plant:measuredVariable
+    a owl:DatatypeProperty ;
+    rdfs:label "measured variable" ;
+    rdfs:comment "The physical quantity a device type measures: \"level\", \"pressure\", \"temperature\" or \"flow\". Two types with the same measured variable can replace each other functionally." ;
+    rdfs:domain plant:DeviceType ;
+    rdfs:range xsd:string .
+
+plant:measuredMedium
+    a owl:DatatypeProperty ;
+    rdfs:label "measured medium" ;
+    rdfs:comment "The fluid a device is in contact with, for example \"solvent\" or \"process water\". Optional: plant data is often incomplete." ;
+    rdfs:domain plant:Device ;
+    rdfs:range xsd:string .
+
+plant:certificateNumber
+    a owl:DatatypeProperty ;
+    rdfs:label "certificate number" ;
+    rdfs:comment "Identifier of the approval certificate." ;
+    rdfs:domain plant:Approval ;
+    rdfs:range xsd:string .
