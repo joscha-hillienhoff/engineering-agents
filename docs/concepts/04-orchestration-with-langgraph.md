@@ -311,12 +311,15 @@ The agent nodes pass `runtime.stream_writer` as the `on_tool_call` callback
 from chapter 03, so every tool call shows up the moment it happens, without
 any printing inside the graph.
 
-## 9. Where the human approval will go
+## 9. Where the human approval goes
 
-Right now the supervisor hands a conforming plan over directly. The next
-chapter puts a person in between: before `hand_over`, the run pauses
-(a LangGraph *interrupt*), shows the plan, and continues only after an
-approval. The supervisor's `conforms` branch is where that decision sits.
+As described so far, the supervisor hands a conforming plan over directly.
+[Chapter 05](05-human-in-the-loop.md) puts a person in between: before
+`hand_over`, the run pauses (a LangGraph *interrupt*), shows the plan, and
+continues only after an approval. The supervisor's `conforms` branch is where
+that decision sits. The diagram in section 4 shows the graph without the
+approval node; chapter 05 and [`docs/img/graph.mmd`](../img/graph.mmd) show
+the current one.
 
 ## 10. Testing the orchestration
 
