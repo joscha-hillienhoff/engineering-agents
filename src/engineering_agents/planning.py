@@ -6,8 +6,9 @@ check a draft plan against the SHACL rules. Its answer is a ``ReplacementPlan``.
 
 If a plan was rejected because it breaks a rule, the planning agent is run
 again with the rejected plan and the violations, and has to revise the
-affected entries. Who rejects the plan and sends it back is up to the caller;
-in this project that will be the supervisor.
+affected entries. A person reviewing the plan can also reject it with a
+comment, which reaches the agent the same way. Who sends the plan back is up
+to the caller; in this project it is the supervisor (see ``orchestration.py``).
 """
 
 from collections.abc import Callable, Sequence
@@ -71,13 +72,14 @@ def run_planning(
     replacement_type: str,
     previous_plan: ReplacementPlan | None = None,
     violations: Sequence[Violation] = (),
+    review_comment: str | None = None,
     on_tool_call: Callable[[ToolCall], None] | None = None,
 ) -> AgentResult[ReplacementPlan]:
     """Let the planning agent propose (or revise) a replacement plan."""
     return run_agent(
         model,
         instructions=INSTRUCTIONS,
-        task=planning_task(analysis, replacement_type, previous_plan, violations),
+        task=planning_task(analysis, replacement_type, previous_plan, violations, review_comment),
         tools=[
             list_type_approvals,
             find_replacement_candidates,
@@ -94,8 +96,13 @@ def planning_task(
     replacement_type: str,
     previous_plan: ReplacementPlan | None = None,
     violations: Sequence[Violation] = (),
+    review_comment: str | None = None,
 ) -> str:
-    """Write the planning agent's task: the analysis, the request and any feedback."""
+    """Write the planning agent's task: the analysis, the request and any feedback.
+
+    Feedback comes from two places: rule violations found by the validator,
+    and the comment of a person who rejected an earlier plan.
+    """
     parts = [
         f"Requested replacement type: {replacement_type}",
         f"Analysis:\n{analysis.model_dump_json(indent=2)}",
@@ -107,5 +114,10 @@ def planning_task(
         parts.append(
             f"The previous plan was rejected because it breaks these rules:\n{listed}\n"
             "Revise the affected entries."
+        )
+    if review_comment:
+        parts.append(
+            f"A reviewer rejected an earlier plan with this comment:\n{review_comment}\n"
+            "Revise the plan so that it takes the comment into account."
         )
     return "\n\n".join(parts)

@@ -9,13 +9,16 @@ graph TD;
 	analysis(analysis)
 	planning(planning)
 	validator(validator)
+	approval(approval)
 	hand_over(hand_over)
 	__end__([<p>__end__</p>]):::last
 	__start__ --> supervisor;
 	analysis --> supervisor;
+	approval --> supervisor;
 	planning --> supervisor;
 	supervisor -.-> __end__;
 	supervisor -.-> analysis;
+	supervisor -.-> approval;
 	supervisor -.-> hand_over;
 	supervisor -.-> planning;
 	supervisor -.-> validator;

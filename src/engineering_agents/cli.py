@@ -5,20 +5,31 @@ engineering-agents validate
 engineering-agents check-replacement --type <new type> [--from <old type>]
 engineering-agents analyse [--task <text>]
 engineering-agents plan [--task <text>] [--type <new type>]
-engineering-agents run [--task <text>] [--type <new type>] [--max-rounds <n>]
+engineering-agents run [--task <text>] [--type <new type>] [--max-rounds <n>] [--auto-approve]
+engineering-agents demo [--offline] [--auto-approve]
 engineering-agents graph
 """
 
 import argparse
 import json
 import textwrap
+from collections.abc import Callable
 
+import openai
+from langchain_core.language_models import BaseChatModel
+from langgraph.types import Command
 from pydantic import BaseModel
 
 from engineering_agents.agent import AgentResult, ToolCall, make_model
 from engineering_agents.analysis import TASK, run_analysis
 from engineering_agents.graph import ROOT, load_graph
-from engineering_agents.orchestration import Context, build_graph, initial_state
+from engineering_agents.offline import OfflineModel
+from engineering_agents.orchestration import (
+    Context,
+    build_graph,
+    initial_state,
+    memory_checkpointer,
+)
 from engineering_agents.planning import run_planning
 from engineering_agents.queries import QUERIES, run_query
 from engineering_agents.validation import ValidationResult, check_replacements, validate_plant
@@ -97,9 +108,10 @@ def main(argv: list[str] | None = None) -> None:
         help="run the whole multi-agent graph with the supervisor (calls the OpenAI API)",
         description="Run the LangGraph graph: the supervisor sends the task to the analysis "
         "agent, the planning agent and the SHACL validator, sends rejected plans back to the "
-        "planner, and hands over a conforming plan. Prints every step as it happens. "
-        "Needs OPENAI_API_KEY in the environment or in .env.",
+        "planner, pauses for a person to approve a conforming plan, and hands it over. "
+        "Prints every step as it happens. Needs OPENAI_API_KEY in the environment or in .env.",
     )
+    add_auto_approve(run_parser)
     run_parser.add_argument("--task", default=TASK, help="the task (default: %(default)s)")
     run_parser.add_argument(
         "--type",
@@ -112,6 +124,21 @@ def main(argv: list[str] | None = None) -> None:
         default=Context.max_planning_rounds,
         help="planning rounds before the supervisor stops (default: %(default)s)",
     )
+
+    demo_parser = commands.add_parser(
+        "demo",
+        help="run the whole scenario step by step, online or with a scripted offline model",
+        description="Run the demo scenario end to end with narrated output: analysis, a plan "
+        "with type B, the SHACL violation in zone 1, the revised plan, the approval prompt and "
+        "the hand-over. Uses the OpenAI model if OPENAI_API_KEY works, and otherwise a scripted "
+        "offline stand-in for the model; the output says which.",
+    )
+    demo_parser.add_argument(
+        "--offline",
+        action="store_true",
+        help="use the scripted offline model even if an API key is available",
+    )
+    add_auto_approve(demo_parser)
 
     commands.add_parser(
         "graph",
@@ -136,7 +163,16 @@ def main(argv: list[str] | None = None) -> None:
             parser.error(str(error))
         print(f"Model: {model.model_name}\n")
         context = Context(model=model, max_planning_rounds=args.max_rounds)
-        run_graph(initial_state(args.task, args.type), context)
+        run_graph(initial_state(args.task, args.type), context, reviewer(args.auto_approve))
+        return
+
+    if args.command == "demo":
+        if args.offline:
+            model, mode = OfflineModel(), OFFLINE.format(why="--offline")
+        else:
+            model, mode = demo_model()
+        print(DEMO_INTRO.format(task=TASK, mode=mode))
+        run_graph(initial_state(), Context(model=model), reviewer(args.auto_approve), narrate=True)
         return
 
     if args.command in ("analyse", "plan"):
@@ -195,35 +231,139 @@ def main(argv: list[str] | None = None) -> None:
             raise SystemExit(1)
 
 
-def run_graph(state: dict, context: Context) -> dict:
+Decision = dict  # the resume value: {"approved": True} or {"approved": False, "comment": ...}
+
+DEMO_INTRO = """\
+engineering-agents demo
+=======================
+Task: {task}
+
+Mode: {mode}
+"""
+
+OFFLINE = (
+    "offline - a scripted stand-in plays the language model ({why}).\n"
+    "      The SPARQL tools, the SHACL validation and the LangGraph run are real."
+)
+
+# In the demo, a heading before each node explains what is about to happen.
+STEPS = {
+    "analysis": "Analysis agent: an LLM with SPARQL tools finds the affected devices",
+    "planning": "Planning agent: an LLM with tools proposes a type for every device",
+    "validator": "SHACL validator: plain code checks the plan against the rules",
+    "approval": "Human approval: the graph pauses with an interrupt until a person decides",
+    "hand_over": "Hand-over: the approved plan is the result of the run",
+}
+
+
+def run_graph(
+    state: dict, context: Context, review: Callable[[], Decision], narrate: bool = False
+) -> dict:
     """Run the graph and print each step as it happens; return the final state.
 
     ``stream`` yields events while the graph runs. Three kinds are requested:
     "custom" (what a node sends while it runs; here the agents' tool calls),
     "updates" (the part of the state a node returned, after each node) and
-    "values" (the whole state after each step; the last one is the result).
+    "values" (the whole state after each step).
+
+    When the run reaches the approval node it pauses and the stream ends. The
+    checkpointer has saved the state under the thread id, so ``get_state``
+    shows the pause and its request. ``review`` returns the person's decision,
+    and streaming ``Command(resume=decision)`` on the same thread continues the
+    run where it stopped. ``narrate`` adds a heading before each node.
     """
-    final = state
-    for mode, event in build_graph().stream(
-        state, context=context, stream_mode=["custom", "updates", "values"]
-    ):
-        if mode == "custom":
-            print_tool_call(event)
-        elif mode == "values":
-            final = event
-        else:
-            print_update(event)
+    graph = build_graph(checkpointer=memory_checkpointer())
+    config = {"configurable": {"thread_id": "cli-run"}}  # where this run's checkpoints go
+    graph_input = state
+    step = 0
+    while True:
+        for mode, event in graph.stream(
+            graph_input, config, context=context, stream_mode=["custom", "updates"]
+        ):
+            if mode == "custom":
+                print_tool_call(event)
+            elif "__interrupt__" not in event:  # the pause is handled below
+                print_update(event)
+                next_node = event.get("supervisor", {}).get("next")
+                if narrate and next_node in STEPS:
+                    step += 1
+                    print(f"\n== Step {step} - {STEPS[next_node]}")
+        paused = graph.get_state(config)
+        if not paused.interrupts:
+            break
+        print("\n" + paused.interrupts[0].value + "\n")
+        graph_input = Command(resume=review())
+
+    final = paused.values
     print(f"\nStatus: {final['status']}")
     if final["status"] == "handed_over":
         print(f"Plan: {final['plan'].summary}")
     return final
 
 
+def reviewer(auto_approve: bool) -> Callable[[], Decision]:
+    """The person who approves plans: the terminal, or automatic approval."""
+    return approve_automatically if auto_approve else ask_in_terminal
+
+
+def ask_in_terminal() -> Decision:
+    """Ask whether to approve the plan; a rejection needs a comment for the planner."""
+    while True:
+        try:
+            answer = input("Approve this plan? [a]pprove / [r]eject: ").strip().lower()
+        except EOFError:
+            raise SystemExit(
+                "No answer: the approval needs a terminal. "
+                "Use --auto-approve for a non-interactive run."
+            ) from None
+        if answer in ("a", "approve"):
+            return {"approved": True}
+        if answer in ("r", "reject"):
+            comment = input("Why? (sent to the planning agent): ").strip()
+            return {"approved": False, "comment": comment}
+
+
+def approve_automatically() -> Decision:
+    print("--auto-approve: approved without asking (for tests and non-interactive runs only)")
+    return {"approved": True}
+
+
+def demo_model() -> tuple[BaseChatModel, str]:
+    """The OpenAI model if the API key works, otherwise the offline model; and which mode it is.
+
+    One cheap request checks the key: it looks up the model, which costs nothing.
+    """
+    try:
+        model = make_model()
+        model.root_client.with_options(timeout=10, max_retries=0).models.retrieve(model.model_name)
+    except RuntimeError:
+        return OfflineModel(), OFFLINE.format(why="OPENAI_API_KEY is not set")
+    except openai.OpenAIError as error:
+        why = f"the OpenAI API check failed: {type(error).__name__}"
+        return OfflineModel(), OFFLINE.format(why=why)
+    return model, f"online - the agents use the OpenAI model {model.model_name}."
+
+
+def add_auto_approve(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--auto-approve",
+        action="store_true",
+        help="approve the plan without asking; for tests and non-interactive runs only",
+    )
+
+
 def print_update(event: dict[str, dict]) -> None:
-    """Show what a node did: its trace notes, and the new plan or violations."""
+    """Show what a node did: its trace notes, and its result (devices, plan, violations)."""
     for node, update in event.items():
         for entry in update["trace"]:
             print(f"[{entry['node']}] {entry['note']}")
+        if node == "analysis":
+            rows = [
+                {"device": d.device, "location": d.location, "zone": d.zone}
+                for d in update["analysis"].affected_devices
+            ]
+            print(textwrap.indent(format_table(rows), "    "))
+            print(f"    {update['analysis'].ex_zone_note}")
         if node == "planning":
             rows = [
                 {"device": e.device, "proposed type": e.proposed_type, "reason": e.reason}
