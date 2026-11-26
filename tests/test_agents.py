@@ -220,6 +220,15 @@ def test_make_model_needs_an_api_key(monkeypatch, tmp_path):
         make_model()
 
 
+def test_make_model_uses_the_responses_api(monkeypatch, tmp_path):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")  # never used: nothing is sent
+    monkeypatch.delenv("OPENAI_MODEL", raising=False)
+    monkeypatch.chdir(tmp_path)  # no .env here
+    model = make_model()
+    assert model.use_responses_api is True
+    assert model.model_name == "gpt-5.6-luna"
+
+
 def test_cli_without_api_key_is_a_usage_error(monkeypatch, tmp_path, capsys):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.chdir(tmp_path)

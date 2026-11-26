@@ -46,7 +46,10 @@ def make_model() -> BaseChatModel:
     load_dotenv(find_dotenv(usecwd=True))
     if not os.environ.get("OPENAI_API_KEY"):
         raise RuntimeError("OPENAI_API_KEY is not set; put it in the environment or in .env")
-    return ChatOpenAI(model=os.environ.get("OPENAI_MODEL", DEFAULT_MODEL))
+    # Current reasoning models accept function tools only through the Responses
+    # API (/v1/responses), not through Chat Completions. LangChain translates
+    # the messages and tool calls, so the agent loop stays the same.
+    return ChatOpenAI(model=os.environ.get("OPENAI_MODEL", DEFAULT_MODEL), use_responses_api=True)
 
 
 @dataclass(frozen=True)
