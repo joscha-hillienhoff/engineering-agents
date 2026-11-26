@@ -1,5 +1,7 @@
 # engineering-agents
 
+[![CI](https://github.com/joscha-hillienhoff/engineering-agents/actions/workflows/ci.yml/badge.svg)](https://github.com/joscha-hillienhoff/engineering-agents/actions/workflows/ci.yml)
+
 A deliberately small multi-agent system in LangGraph: two LLM agents, a rule
 check and a human approval work on a plant-engineering task over a shared
 ontology.
@@ -234,7 +236,7 @@ src/engineering_agents/
     orchestration.py           LangGraph graph: state, supervisor, agents, validator, approval
     offline.py                 scripted stand-in for the model, for the offline demo
     cli.py                     command-line interface, including the demo
-tests/                         graph, queries, validation, agents, orchestration (offline)
+tests/                         graph, queries, validation, agents, orchestration, CLI (offline)
 notebooks/walkthrough.ipynb    the concepts cell by cell, with outputs
 docs/concepts/                 explanations of the underlying concepts
 docs/img/graph.mmd             the orchestration graph as a Mermaid diagram
