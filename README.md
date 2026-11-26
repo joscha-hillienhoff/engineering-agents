@@ -111,7 +111,10 @@ the SHACL validation and the LangGraph run are real.
 
 Copy `.env.example` to `.env` and set `OPENAI_API_KEY` (or set it in the
 environment); `OPENAI_MODEL` overrides the default small model. `.env` is
-ignored by git.
+ignored by git. The model talks to OpenAI's Responses API
+(`use_responses_api=True`), because current reasoning models such as the
+default one accept function tools there but not in the older Chat Completions
+API.
 
 ```console
 uv run engineering-agents analyse   # the analysis agent alone

@@ -357,6 +357,14 @@ The agents need an OpenAI API key. Copy `.env.example` to `.env` and fill in
 `OPENAI_MODEL` selects another model; the default is a small, cheap model with
 tool calling.
 
+`make_model()` creates the model with `ChatOpenAI(..., use_responses_api=True)`,
+so requests go to OpenAI's Responses API (`/v1/responses`) instead of the older
+Chat Completions API. Current reasoning models such as the default one reject
+function tools on Chat Completions, while the Responses API supports them.
+LangChain translates the messages, so the loop above and its tool calls and
+tool messages stay the same; only the JSON on the wire differs a little from
+the Chat Completions format shown in section 2.
+
 ```console
 uv run engineering-agents analyse   # the analysis agent alone
 uv run engineering-agents plan      # analysis, then planning, then a SHACL check of the plan
