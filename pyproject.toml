@@ -5,6 +5,7 @@ description = "A minimal multi-agent demo over a plant-engineering knowledge gra
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
+authors = [{ name = "Joscha Hillienhoff" }]
 requires-python = ">=3.12"
 dependencies = [
     "langchain-core>=1.8.4",
@@ -14,6 +15,9 @@ dependencies = [
     "python-dotenv>=1.2.4",
     "rdflib>=7.1",
 ]
+
+[project.urls]
+Repository = "https://github.com/joscha-hillienhoff/engineering-agents"
 
 [project.scripts]
 engineering-agents = "engineering_agents.cli:main"
